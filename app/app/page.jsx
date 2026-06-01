@@ -114,7 +114,7 @@ export default function AppPage() {
     const itemList = limited.map((it, i) => `${i + 1}. ID=${it.id} | "${it.name}" | ${it.category}`).join("\n");
 
     try {
-      const response = await fetch("https://wore-next.vercel.app/api/generate", {
+      const response = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
