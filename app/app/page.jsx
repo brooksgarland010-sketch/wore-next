@@ -118,7 +118,7 @@ export default function AppPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "claude-sonnet-4-5",
+          model: "claude-sonnet-4-5-20250929",
           max_tokens: 1500,
           messages: [{ role: "user", content: [...imageContent, { type: "text", text: `You are an expert fashion stylist. Here are ${limited.length} clothing items (images above in order):\n\n${itemList}\n\nCreate 4 stylish outfit combinations. Return ONLY raw JSON, no markdown:\n{"outfits":[{"name":"string","itemIds":[number,number],"description":"string","styleScore":8,"tips":"string"}]}` }] }]
         })
