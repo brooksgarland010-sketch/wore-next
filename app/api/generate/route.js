@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 
+export const runtime = "nodejs";
 export const maxDuration = 60;
 
 export async function POST(req) {
   try {
     const body = await req.json();
-
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -15,7 +15,6 @@ export async function POST(req) {
       },
       body: JSON.stringify(body),
     });
-
     const data = await response.json();
     return NextResponse.json(data, { status: response.status });
   } catch (err) {
