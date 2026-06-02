@@ -1,14 +1,7 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
 import { useUser } from "@clerk/nextjs";
-import { createClient } from "@supabase/supabase-js";
-
-function getSupabase() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  );
-}
+import { supabase } from "@/lib/supabase";
 
 const EMPTY_FORM = { name: "", category: "tops", frontData: null, backData: null };
 
@@ -77,8 +70,7 @@ export default function AppPage() {
   // Load wardrobe from Supabase on mount
   useEffect(() => {
     if (!isLoaded || !user) return;
-    const supabase = getSupabase();
-    supabase
+      supabase
       .from("wardrobe_items")
       .select("*")
       .eq("user_id", user.id)
@@ -91,8 +83,7 @@ export default function AppPage() {
   }, [isLoaded, user]);
 
   const addItemToDb = async (item) => {
-    const supabase = getSupabase();
-    const { data, error } = await supabase
+      const { data, error } = await supabase
       .from("wardrobe_items")
       .insert([{ ...item, user_id: user.id }])
       .select()
@@ -102,8 +93,7 @@ export default function AppPage() {
   };
 
   const updateItemInDb = async (id, updates) => {
-    const supabase = getSupabase();
-    const { error } = await supabase
+      const { error } = await supabase
       .from("wardrobe_items")
       .update(updates)
       .eq("id", id)
@@ -112,8 +102,7 @@ export default function AppPage() {
   };
 
   const deleteItemFromDb = async (id) => {
-    const supabase = getSupabase();
-    const { error } = await supabase
+      const { error } = await supabase
       .from("wardrobe_items")
       .delete()
       .eq("id", id)
