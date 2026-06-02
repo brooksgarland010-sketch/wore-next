@@ -1,17 +1,16 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
+import { useUser } from "@clerk/nextjs";
+import { createClient } from "@supabase/supabase-js";
 
-const STORAGE_KEY = "wore_v1";
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  );
+}
+
 const EMPTY_FORM = { name: "", category: "tops", frontData: null, backData: null };
-
-function loadWardrobe() {
-  if (typeof window === "undefined") return [];
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); }
-  catch { return []; }
-}
-function saveWardrobe(items) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-}
 
 async function resizeImage(dataUrl, maxWidth = 1200) {
   return new Promise((resolve) => {
@@ -61,7 +60,9 @@ function Stars({ score }) {
 }
 
 export default function AppPage() {
+  const { user, isLoaded } = useUser();
   const [wardrobe, setWardrobe] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [view, setView] = useState("wardrobe");
   const [outfits, setOutfits] = useState([]);
   const [generating, setGenerating] = useState(false);
@@ -70,11 +71,55 @@ export default function AppPage() {
   const [previewSide, setPreviewSide] = useState("front");
   const [addForm, setAddForm] = useState(EMPTY_FORM);
   const [activeUpload, setActiveUpload] = useState(null);
+  const [saving, setSaving] = useState(false);
   const fileRef = useRef();
 
-  useEffect(() => { setWardrobe(loadWardrobe()); }, []);
+  // Load wardrobe from Supabase on mount
+  useEffect(() => {
+    if (!isLoaded || !user) return;
+    const supabase = getSupabase();
+    supabase
+      .from("wardrobe_items")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: true })
+      .then(({ data, error }) => {
+        if (error) console.error("Load error:", error);
+        else setWardrobe(data || []);
+        setLoading(false);
+      });
+  }, [isLoaded, user]);
 
-  const updateWardrobe = (items) => { setWardrobe(items); saveWardrobe(items); };
+  const addItemToDb = async (item) => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from("wardrobe_items")
+      .insert([{ ...item, user_id: user.id }])
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  };
+
+  const updateItemInDb = async (id, updates) => {
+    const supabase = getSupabase();
+    const { error } = await supabase
+      .from("wardrobe_items")
+      .update(updates)
+      .eq("id", id)
+      .eq("user_id", user.id);
+    if (error) throw error;
+  };
+
+  const deleteItemFromDb = async (id) => {
+    const supabase = getSupabase();
+    const { error } = await supabase
+      .from("wardrobe_items")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", user.id);
+    if (error) throw error;
+  };
 
   const triggerUpload = (side) => {
     setActiveUpload(side);
@@ -94,25 +139,60 @@ export default function AppPage() {
     reader.readAsDataURL(file);
   };
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!addForm.name || !addForm.frontData) return;
-    updateWardrobe([...wardrobe, { id: Date.now(), name: addForm.name, category: addForm.category, imageData: addForm.frontData, backData: addForm.backData || null, dirty: false }]);
-    setAddForm({ ...EMPTY_FORM });
-    setView("wardrobe");
+    setSaving(true);
+    try {
+      const newItem = {
+        name: addForm.name,
+        category: addForm.category,
+        image_data: addForm.frontData,
+        back_data: addForm.backData || null,
+        dirty: false,
+      };
+      const saved = await addItemToDb(newItem);
+      // normalize field names for UI (db uses snake_case)
+      setWardrobe(w => [...w, normalizeItem(saved)]);
+      setAddForm({ ...EMPTY_FORM });
+      setView("wardrobe");
+    } catch (err) {
+      alert("Failed to save: " + err.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const toggleDirty = (id) => updateWardrobe(wardrobe.map(i => i.id === id ? { ...i, dirty: !i.dirty } : i));
-  const removeItem = (id) => updateWardrobe(wardrobe.filter(i => i.id !== id));
+  // DB uses snake_case, UI uses camelCase — normalize
+  const normalizeItem = (item) => ({
+    ...item,
+    imageData: item.image_data || item.imageData,
+    backData: item.back_data || item.backData,
+  });
+
+  const toggleDirty = async (id) => {
+    const item = wardrobe.find(i => i.id === id);
+    const newDirty = !item.dirty;
+    setWardrobe(w => w.map(i => i.id === id ? { ...i, dirty: newDirty } : i));
+    try { await updateItemInDb(id, { dirty: newDirty }); }
+    catch (err) { console.error("Update error:", err); }
+  };
+
+  const removeItem = async (id) => {
+    setWardrobe(w => w.filter(i => i.id !== id));
+    try { await deleteItemFromDb(id); }
+    catch (err) { console.error("Delete error:", err); }
+  };
 
   const generateOutfits = async () => {
     const clean = wardrobe.filter(i => !i.dirty);
     if (clean.length < 2) { alert("Add at least 2 clean items first!"); return; }
     setGenerating(true); setOutfits([]); setGenError(""); setView("outfits");
-
     const limited = clean.slice(0, 6);
-    const imageContent = limited.map(item => ({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: item.imageData.split(",")[1] } }));
+    const imageContent = limited.map(item => ({
+      type: "image",
+      source: { type: "base64", media_type: "image/jpeg", data: (item.imageData || item.image_data).split(",")[1] }
+    }));
     const itemList = limited.map((it, i) => `${i + 1}. ID=${it.id} | "${it.name}" | ${it.category}`).join("\n");
-
     try {
       const response = await fetch("/api/generate", {
         method: "POST",
@@ -123,15 +203,12 @@ export default function AppPage() {
           messages: [{ role: "user", content: [...imageContent, { type: "text", text: `You are an expert fashion stylist. Here are ${limited.length} clothing items (images above in order):\n\n${itemList}\n\nCreate 4 stylish outfit combinations. Return ONLY raw JSON, no markdown:\n{"outfits":[{"name":"string","itemIds":[number,number],"description":"string","styleScore":8,"tips":"string"}]}` }] }]
         })
       });
-
       if (!response.ok) throw new Error(`API error ${response.status}`);
       const data = await response.json();
       if (data.error) throw new Error(data.error.message);
-
       const rawText = data.content?.find(b => b.type === "text")?.text || "";
       const jsonMatch = rawText.match(/\{[\s\S]*\}/);
       if (!jsonMatch) throw new Error("No JSON in response");
-
       const parsed = JSON.parse(jsonMatch[0]);
       const enriched = parsed.outfits
         .map(o => ({ ...o, items: (o.itemIds || []).map(id => clean.find(i => i.id === id)).filter(Boolean) }))
@@ -148,10 +225,21 @@ export default function AppPage() {
   const cleanCount = wardrobe.filter(i => !i.dirty).length;
   const dirtyCount = wardrobe.filter(i => i.dirty).length;
 
+  if (!isLoaded || loading) {
+    return (
+      <div style={{ minHeight: "100vh", background: "#f5f4f0", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
+        <WoreLogo />
+        <div style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: 16, fontWeight: 800, color: "#0d0d0d" }}>Loading your closet...</div>
+        <div style={{ display: "flex", gap: 6 }}>
+          {[0,1,2].map(i => <div key={i} style={{ width: 7, height: 7, borderRadius: "50%", background: "#c8f55a", animation: "pulse 1.2s infinite", animationDelay: `${i*0.2}s` }} />)}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ minHeight: "100vh", background: "#f5f4f0", fontFamily: "var(--font-inter), sans-serif" }}>
       <style>{`@keyframes pulse{0%,80%,100%{transform:scale(0.5);opacity:0.3}40%{transform:scale(1);opacity:1}}`}</style>
-
       <header style={{ background: "#0d0d0d", padding: "0 1.25rem", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 100 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <WoreLogo />
@@ -199,10 +287,10 @@ export default function AppPage() {
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(155px, 1fr))", gap: 12 }}>
                 {wardrobe.map(item => (
                   <div key={item.id} style={{ background: "#fff", borderRadius: 16, overflow: "hidden", border: item.dirty ? "1.5px solid #ffaaaa" : "1px solid #ece9e2" }}>
-                    <div onClick={() => { setPreviewItem(item); setPreviewSide("front"); }} style={{ position: "relative", cursor: "pointer" }}>
-                      <img src={item.imageData} alt={item.name} style={{ width: "100%", height: 165, objectFit: "cover", display: "block" }} />
+                    <div onClick={() => { setPreviewItem(normalizeItem(item)); setPreviewSide("front"); }} style={{ position: "relative", cursor: "pointer" }}>
+                      <img src={item.image_data || item.imageData} alt={item.name} style={{ width: "100%", height: 165, objectFit: "cover", display: "block" }} />
                       {item.dirty && <div style={{ position: "absolute", top: 8, left: 8, background: "#0d0d0d", color: "#ff6b6b", fontSize: 9, fontWeight: 800, borderRadius: 5, padding: "2px 7px", textTransform: "uppercase" }}>Dirty</div>}
-                      {item.backData && <div style={{ position: "absolute", bottom: 8, right: 8, background: "rgba(13,13,13,0.75)", color: "#c8f55a", fontSize: 9, fontWeight: 700, borderRadius: 5, padding: "2px 7px" }}>+BACK</div>}
+                      {(item.back_data || item.backData) && <div style={{ position: "absolute", bottom: 8, right: 8, background: "rgba(13,13,13,0.75)", color: "#c8f55a", fontSize: 9, fontWeight: 700, borderRadius: 5, padding: "2px 7px" }}>+BACK</div>}
                     </div>
                     <div style={{ padding: "10px 11px 11px" }}>
                       <div style={{ fontWeight: 600, fontSize: 13, color: "#0d0d0d", marginBottom: 5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{item.name}</div>
@@ -249,9 +337,9 @@ export default function AppPage() {
               </div>
               <div style={{ display: "flex", gap: 10 }}>
                 <button onClick={() => { setAddForm({ ...EMPTY_FORM }); setView("wardrobe"); }} style={{ flex: 1, background: "#f5f4f0", color: "#666", border: "none", borderRadius: 12, padding: "13px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Cancel</button>
-                <button onClick={handleAdd} disabled={!addForm.name || !addForm.frontData}
+                <button onClick={handleAdd} disabled={!addForm.name || !addForm.frontData || saving}
                   style={{ flex: 2, background: !addForm.name || !addForm.frontData ? "#e0e0d8" : "#0d0d0d", color: !addForm.name || !addForm.frontData ? "#aaa" : "#c8f55a", border: "none", borderRadius: 12, padding: "13px", fontSize: 14, fontWeight: 800, cursor: !addForm.name || !addForm.frontData ? "not-allowed" : "pointer", fontFamily: "var(--font-syne), sans-serif" }}>
-                  Add to Closet
+                  {saving ? "Saving..." : "Add to Closet"}
                 </button>
               </div>
             </div>
@@ -300,7 +388,7 @@ export default function AppPage() {
                       <div style={{ display: "flex", gap: 10, marginBottom: 12, overflowX: "auto", paddingBottom: 2 }}>
                         {outfit.items.map(item => (
                           <div key={item.id} style={{ flex: "0 0 auto", textAlign: "center" }}>
-                            <img src={item.imageData} alt={item.name} style={{ width: 70, height: 70, objectFit: "cover", borderRadius: 12, display: "block", border: "1px solid #ece9e2" }} />
+                            <img src={item.image_data || item.imageData} alt={item.name} style={{ width: 70, height: 70, objectFit: "cover", borderRadius: 12, display: "block", border: "1px solid #ece9e2" }} />
                             <div style={{ fontSize: 10, color: "#aaa", marginTop: 4, maxWidth: 70, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</div>
                           </div>
                         ))}
