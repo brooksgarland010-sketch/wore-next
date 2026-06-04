@@ -244,6 +244,9 @@ export default function AppPage() {
               {tab.label}
             </button>
           ))}
+          <a href="/trading" style={{ background: "#1a2500", color: "#c8f55a", border: "1px solid #2a3a00", borderRadius: 20, padding: "7px 13px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}>
+            ▲ Trade
+          </a>
         </nav>
       </header>
 
