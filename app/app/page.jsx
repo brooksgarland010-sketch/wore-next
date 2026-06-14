@@ -38,7 +38,6 @@ export default function AppPage() {
   const [addForm, setAddForm] = useState(EMPTY_FORM);
   const [activeUpload, setActiveUpload] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [mounted, setMounted] = useState(false);
   const fileRef = useRef();
 
   useEffect(() => {
@@ -52,8 +51,6 @@ export default function AppPage() {
         if (error) console.error("Load error:", error);
         else setWardrobe(data || []);
         setLoading(false);
-        // Delay mounted for stagger entry
-        setTimeout(() => setMounted(true), 50);
       });
   }, [isLoaded, user]);
 
@@ -156,191 +153,134 @@ export default function AppPage() {
 
   if (!isLoaded || loading) {
     return (
-      <div style={{ minHeight: "100vh", background: "#fafafa", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 10 }}>
-        {/* Fast spinner — perceived performance: faster spin = feels faster */}
-        <div style={{ width: 20, height: 20, border: "1.5px solid #e5e5e5", borderTopColor: "#0a0a0a", borderRadius: "50%", animation: "spin 0.5s linear infinite" }} />
-        <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
-        <span style={{ fontSize: 12, color: "#bbb", letterSpacing: "-0.01em" }}>Loading</span>
+      <div style={{ minHeight: "100vh", background: "#0a0a0f", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 10 }}>
+        <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+        <div style={{ width: 20, height: 20, border: "1.5px solid rgba(255,255,255,0.1)", borderTopColor: "#c8f55a", borderRadius: "50%", animation: "spin 0.45s linear infinite" }} />
+        <span style={{ fontSize: 12, color: "rgba(255,255,255,0.25)", letterSpacing: "-0.01em" }}>Loading</span>
       </div>
     );
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "#fafafa", fontFamily: "'Inter', system-ui, sans-serif" }}>
+    <div style={{ minHeight: "100vh", background: "#0a0a0f", fontFamily: "'Inter', system-ui, sans-serif", position: "relative", overflowX: "hidden" }}>
       <style>{`
-        /* Custom easing curves from Emil's skill */
         :root {
           --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
-          --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
           --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
         }
-
-        @keyframes spin { to { transform: rotate(360deg) } }
-
-        /* Entry: scale from 0.95 not 0 — nothing in the real world appears from nothing */
+        * { box-sizing: border-box; }
+        @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes fadeUp {
-          from { opacity: 0; transform: translateY(6px) scale(0.98); }
-          to   { opacity: 1; transform: translateY(0)  scale(1); }
+          from { opacity: 0; transform: translateY(10px) scale(0.97); }
+          to   { opacity: 1; transform: translateY(0) scale(1); }
         }
-
-        /* Bottom sheet: slides in from bottom */
+        @keyframes breathe1 {
+          0%,100% { transform: scale(1) translate(0,0); opacity: 0.18; }
+          50% { transform: scale(1.15) translate(-10px,15px); opacity: 0.28; }
+        }
+        @keyframes breathe2 {
+          0%,100% { transform: scale(1) translate(0,0); opacity: 0.14; }
+          50% { transform: scale(1.2) translate(15px,-10px); opacity: 0.22; }
+        }
+        @keyframes breathe3 {
+          0%,100% { transform: scale(1); opacity: 0.08; }
+          50% { transform: scale(1.3); opacity: 0.15; }
+        }
         @keyframes sheetIn {
           from { transform: translateY(100%); }
-          to   { transform: translateY(0); }
+          to { transform: translateY(0); }
         }
-
-        @keyframes backdropIn {
-          from { opacity: 0; }
-          to   { opacity: 1; }
+        @keyframes bdIn { from { opacity: 0; } to { opacity: 1; } }
+        .wore-btn { transition: all 0.15s var(--ease-out); }
+        .wore-btn:active { transform: scale(0.97); }
+        .wore-card {
+          transition: border-color 0.2s ease, box-shadow 0.2s ease;
         }
-
-        * { box-sizing: border-box; }
-
-        /* Buttons must feel responsive — 160ms, scale(0.97) on :active */
-        .btn {
-          transition: background 150ms ease, color 150ms ease, border-color 150ms ease, transform 160ms var(--ease-out), box-shadow 160ms ease;
-        }
-        .btn:active { transform: scale(0.97); }
-
-        /* Hover only on pointer devices — prevents false positives on touch */
         @media (hover: hover) and (pointer: fine) {
-          .card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
-          .upload-zone:hover { border-color: #aaa !important; }
+          .wore-card:hover { border-color: rgba(200,245,90,0.2) !important; box-shadow: 0 0 0 1px rgba(200,245,90,0.08); }
         }
-
-        /* Stagger: wardrobe grid items */
-        .grid-item { opacity: 0; animation: fadeUp 240ms var(--ease-out) forwards; }
-        .grid-item:nth-child(1)  { animation-delay: 0ms; }
-        .grid-item:nth-child(2)  { animation-delay: 40ms; }
-        .grid-item:nth-child(3)  { animation-delay: 80ms; }
-        .grid-item:nth-child(4)  { animation-delay: 120ms; }
-        .grid-item:nth-child(5)  { animation-delay: 160ms; }
-        .grid-item:nth-child(6)  { animation-delay: 200ms; }
-        .grid-item:nth-child(7)  { animation-delay: 240ms; }
-        .grid-item:nth-child(8)  { animation-delay: 280ms; }
-        .grid-item:nth-child(n+9) { animation-delay: 320ms; }
-
-        /* Outfit cards stagger */
-        .outfit-card { opacity: 0; animation: fadeUp 220ms var(--ease-out) forwards; }
-        .outfit-card:nth-child(1) { animation-delay: 0ms; }
-        .outfit-card:nth-child(2) { animation-delay: 60ms; }
-        .outfit-card:nth-child(3) { animation-delay: 120ms; }
-        .outfit-card:nth-child(4) { animation-delay: 180ms; }
-
-        /* View transitions */
-        .view-enter { opacity: 0; transform: translateY(4px) scale(0.99); animation: fadeUp 200ms var(--ease-out) forwards; }
-
-        /* Input focus */
-        input:focus, select:focus { outline: none; border-color: #0a0a0a !important; }
-
-        /* Blur transitions for button content state changes */
-        .btn-content { transition: filter 200ms ease, opacity 200ms ease; }
-        .btn-content.saving { filter: blur(1px); opacity: 0.6; }
-
-        /* prefers-reduced-motion: keep opacity transitions, remove movement */
+        .grid-item { animation: fadeUp 0.3s var(--ease-out) both; }
+        .grid-item:nth-child(1) { animation-delay: 0ms; }
+        .grid-item:nth-child(2) { animation-delay: 45ms; }
+        .grid-item:nth-child(3) { animation-delay: 90ms; }
+        .grid-item:nth-child(4) { animation-delay: 135ms; }
+        .grid-item:nth-child(5) { animation-delay: 180ms; }
+        .grid-item:nth-child(6) { animation-delay: 225ms; }
+        .grid-item:nth-child(n+7) { animation-delay: 270ms; }
+        .outfit-item { animation: fadeUp 0.28s var(--ease-out) both; }
+        .outfit-item:nth-child(1) { animation-delay: 0ms; }
+        .outfit-item:nth-child(2) { animation-delay: 65ms; }
+        .outfit-item:nth-child(3) { animation-delay: 130ms; }
+        .outfit-item:nth-child(4) { animation-delay: 195ms; }
+        .glass-input:focus { outline: none; border-color: rgba(200,245,90,0.4) !important; }
         @media (prefers-reduced-motion: reduce) {
-          .grid-item, .outfit-card, .view-enter {
-            animation: none !important;
-            opacity: 1 !important;
-            transform: none !important;
-          }
-          @keyframes sheetIn { from { opacity: 0; } to { opacity: 1; } }
+          .grid-item, .outfit-item { animation: none !important; opacity: 1 !important; }
+          .orb { animation: none !important; }
         }
       `}</style>
 
-      {/* Header — no animation on nav, used constantly */}
-      <header style={{ background: "rgba(250,250,250,0.85)", backdropFilter: "blur(12px)", borderBottom: "1px solid #e5e5e5", padding: "0 24px", height: 52, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 100 }}>
-        <span style={{ fontSize: 15, fontWeight: 600, letterSpacing: "-0.03em", color: "#0a0a0a" }}>
-          wore<span style={{ color: "#c8f55a" }}>.</span>
-        </span>
-        <nav style={{ display: "flex", alignItems: "center", gap: 2 }}>
-          {[
-            { key: "wardrobe", label: "Closet" },
-            { key: "add", label: "Add" },
-            { key: "outfits", label: "Outfits" }
-          ].map(tab => (
+      {/* Ambient breathing orbs */}
+      <div style={{ position: "fixed", top: -80, right: -80, width: 320, height: 320, borderRadius: "50%", background: "#c8f55a", filter: "blur(90px)", opacity: 0.15, pointerEvents: "none", zIndex: 0, animation: "breathe1 7s ease-in-out infinite" }} className="orb" />
+      <div style={{ position: "fixed", bottom: 100, left: -100, width: 260, height: 260, borderRadius: "50%", background: "#4ade80", filter: "blur(90px)", opacity: 0.12, pointerEvents: "none", zIndex: 0, animation: "breathe2 9s ease-in-out infinite" }} className="orb" />
+      <div style={{ position: "fixed", top: "40%", left: "25%", width: 180, height: 180, borderRadius: "50%", background: "#a78bfa", filter: "blur(80px)", opacity: 0.08, pointerEvents: "none", zIndex: 0, animation: "breathe3 11s ease-in-out infinite" }} className="orb" />
+
+      {/* Header */}
+      <header style={{ position: "sticky", top: 0, zIndex: 50, height: 52, padding: "0 16px", display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(10,10,15,0.7)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderBottom: "0.5px solid rgba(255,255,255,0.07)" }}>
+        <span style={{ fontSize: 17, fontWeight: 600, color: "#fff", letterSpacing: "-0.04em" }}>wore<span style={{ color: "#c8f55a" }}>.</span></span>
+        <nav style={{ display: "flex", gap: 2 }}>
+          {[{ key: "wardrobe", label: "Closet" }, { key: "add", label: "Add" }, { key: "outfits", label: "Outfits" }].map(tab => (
             <button
               key={tab.key}
-              className="btn"
+              className="wore-btn"
               onClick={() => tab.key === "outfits" ? generateOutfits() : setView(tab.key)}
-              style={{
-                background: view === tab.key ? "#0a0a0a" : "transparent",
-                color: view === tab.key ? "#fafafa" : "#666",
-                border: "none", borderRadius: 6,
-                padding: "5px 12px", fontSize: 13, fontWeight: 500,
-                cursor: "pointer", letterSpacing: "-0.01em",
-              }}
-            >
-              {tab.label}
-            </button>
+              style={{ background: view === tab.key ? "rgba(200,245,90,0.12)" : "transparent", color: view === tab.key ? "#c8f55a" : "rgba(255,255,255,0.35)", border: view === tab.key ? "0.5px solid rgba(200,245,90,0.2)" : "0.5px solid transparent", borderRadius: 8, padding: "5px 12px", fontSize: 13, fontWeight: 500, cursor: "pointer", letterSpacing: "-0.01em", fontFamily: "inherit" }}
+            >{tab.label}</button>
           ))}
         </nav>
       </header>
 
       {/* Stats */}
       {view === "wardrobe" && wardrobe.length > 0 && (
-        <div style={{ borderBottom: "1px solid #e5e5e5", padding: "10px 24px", display: "flex", gap: 24, background: "#fafafa" }}>
-          {[
-            { label: "Total", value: wardrobe.length, color: "#0a0a0a" },
-            { label: "Clean", value: cleanCount, color: "#16a34a" },
-            { label: "In wash", value: dirtyCount, color: "#dc2626" },
-          ].map(s => (
-            <div key={s.label} style={{ display: "flex", alignItems: "baseline", gap: 5 }}>
-              <span style={{ fontSize: 18, fontWeight: 600, letterSpacing: "-0.04em", color: s.color, transition: "color 200ms ease" }}>{s.value}</span>
-              <span style={{ fontSize: 11, color: "#aaa", letterSpacing: "-0.01em" }}>{s.label}</span>
+        <div style={{ display: "flex", gap: 8, padding: "12px 16px", borderBottom: "0.5px solid rgba(255,255,255,0.05)" }}>
+          {[{ label: "Total", value: wardrobe.length, color: "#fff" }, { label: "Clean", value: cleanCount, color: "#4ade80" }, { label: "In wash", value: dirtyCount, color: "#f87171" }].map(s => (
+            <div key={s.label} style={{ flex: 1, background: "rgba(255,255,255,0.03)", border: "0.5px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: "10px 12px", textAlign: "center" }}>
+              <div style={{ fontSize: 22, fontWeight: 600, color: s.color, letterSpacing: "-0.05em", lineHeight: 1, marginBottom: 3, transition: "color 0.3s ease" }}>{s.value}</div>
+              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", letterSpacing: "0.05em", textTransform: "uppercase" }}>{s.label}</div>
             </div>
           ))}
         </div>
       )}
 
-      <main style={{ maxWidth: 680, margin: "0 auto", padding: "28px 24px" }}>
+      <main style={{ position: "relative", zIndex: 1, maxWidth: 600, margin: "0 auto" }}>
 
         {/* Wardrobe */}
         {view === "wardrobe" && (
           wardrobe.length === 0 ? (
-            <div className="view-enter" style={{ textAlign: "center", padding: "80px 0" }}>
-              <div style={{ fontSize: 13, color: "#aaa", marginBottom: 4, letterSpacing: "-0.01em" }}>Your closet is empty</div>
-              <div style={{ fontSize: 12, color: "#d4d4d4", marginBottom: 28 }}>Add your first item to get started</div>
-              <button className="btn" onClick={() => setView("add")} style={btnPrimary}>Add item</button>
+            <div style={{ textAlign: "center", padding: "80px 24px", animation: "fadeUp 0.3s var(--ease-out)" }}>
+              <div style={{ fontSize: 13, color: "rgba(255,255,255,0.25)", marginBottom: 4, letterSpacing: "-0.01em" }}>Your closet is empty</div>
+              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.12)", marginBottom: 28 }}>Add your first item to get started</div>
+              <button className="wore-btn" onClick={() => setView("add")} style={btnPrimary}>Add item</button>
             </div>
           ) : (
-            <div className="view-enter">
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-                <h1 style={{ fontSize: 14, fontWeight: 600, color: "#0a0a0a", letterSpacing: "-0.02em", margin: 0 }}>Closet</h1>
-                <button className="btn" onClick={() => setView("add")} style={btnSecondary}>+ Add</button>
+            <div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px 8px" }}>
+                <span style={{ fontSize: 11, fontWeight: 500, color: "rgba(255,255,255,0.3)", letterSpacing: "0.06em", textTransform: "uppercase" }}>Your closet</span>
+                <button className="wore-btn" onClick={() => setView("add")} style={{ background: "rgba(200,245,90,0.1)", border: "0.5px solid rgba(200,245,90,0.2)", color: "#c8f55a", fontSize: 12, fontWeight: 500, borderRadius: 8, padding: "4px 10px", cursor: "pointer", fontFamily: "inherit", letterSpacing: "-0.01em" }}>+ Add</button>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(148px, 1fr))", gap: 8 }}>
-                {wardrobe.map((item, idx) => (
-                  <div
-                    key={item.id}
-                    className="card grid-item"
-                    style={{ background: "#fff", borderRadius: 10, overflow: "hidden", border: item.dirty ? "1px solid #fecaca" : "1px solid #e5e5e5", transition: "box-shadow 200ms ease" }}
-                  >
-                    <div
-                      onClick={() => { setPreviewItem(normalizeItem(item)); setPreviewSide("front"); }}
-                      style={{ position: "relative", cursor: "pointer" }}
-                    >
-                      <img src={item.image_data || item.imageData} alt={item.name} style={{ width: "100%", height: 148, objectFit: "cover", display: "block" }} />
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8, padding: "0 16px 24px" }}>
+                {wardrobe.map((item, i) => (
+                  <div key={item.id} className="grid-item wore-card" style={{ borderRadius: 16, overflow: "hidden", border: "0.5px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)", cursor: "pointer" }}>
+                    <div onClick={() => { setPreviewItem(normalizeItem(item)); setPreviewSide("front"); }} style={{ position: "relative" }}>
+                      <img src={item.image_data || item.imageData} alt={item.name} style={{ width: "100%", aspectRatio: "1", objectFit: "cover", display: "block" }} />
                       {item.dirty && (
-                        <div style={{ position: "absolute", top: 7, left: 7, background: "rgba(10,10,10,0.8)", color: "#fca5a5", fontSize: 9, fontWeight: 500, borderRadius: 4, padding: "2px 6px", backdropFilter: "blur(4px)", letterSpacing: "0.02em" }}>In wash</div>
+                        <div style={{ position: "absolute", top: 7, left: 7, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "0.5px solid rgba(248,113,113,0.3)", color: "#f87171", fontSize: 9, fontWeight: 600, borderRadius: 6, padding: "2px 7px", letterSpacing: "0.04em" }}>IN WASH</div>
                       )}
                     </div>
                     <div style={{ padding: "9px 10px 8px" }}>
-                      <div style={{ fontWeight: 500, fontSize: 12, color: "#0a0a0a", marginBottom: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", letterSpacing: "-0.01em" }}>{item.name}</div>
-                      <div style={{ fontSize: 11, color: "#bbb", marginBottom: 7, letterSpacing: "-0.01em" }}>{CATS[item.category] || item.category}</div>
+                      <div style={{ fontSize: 12, fontWeight: 500, color: "rgba(255,255,255,0.8)", marginBottom: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", letterSpacing: "-0.02em" }}>{item.name}</div>
                       <div style={{ display: "flex", gap: 4 }}>
-                        <button
-                          className="btn"
-                          onClick={() => toggleDirty(item.id)}
-                          style={{ flex: 1, border: "1px solid #e5e5e5", background: "#fafafa", borderRadius: 5, padding: "5px 0", cursor: "pointer", fontSize: 11, fontWeight: 500, color: item.dirty ? "#dc2626" : "#16a34a", letterSpacing: "-0.01em", transition: "color 150ms ease, background 150ms ease, transform 160ms var(--ease-out)" }}
-                        >
-                          {item.dirty ? "Dirty" : "Clean"}
-                        </button>
-                        <button
-                          className="btn"
-                          onClick={() => removeItem(item.id)}
-                          style={{ border: "1px solid #e5e5e5", background: "#fafafa", borderRadius: 5, padding: "5px 8px", cursor: "pointer", fontSize: 12, color: "#d4d4d4", fontFamily: "inherit" }}
-                        >×</button>
+                        <button className="wore-btn" onClick={() => toggleDirty(item.id)} style={{ flex: 1, border: "0.5px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)", borderRadius: 6, padding: "5px 0", cursor: "pointer", fontSize: 11, fontWeight: 500, color: item.dirty ? "#f87171" : "#4ade80", fontFamily: "inherit", letterSpacing: "-0.01em" }}>{item.dirty ? "Dirty" : "Clean"}</button>
+                        <button className="wore-btn" onClick={() => removeItem(item.id)} style={{ border: "0.5px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)", borderRadius: 6, padding: "5px 8px", cursor: "pointer", fontSize: 12, color: "rgba(255,255,255,0.15)", fontFamily: "inherit" }}>×</button>
                       </div>
                     </div>
                   </div>
@@ -352,117 +292,84 @@ export default function AppPage() {
 
         {/* Add */}
         {view === "add" && (
-          <div className="view-enter" style={{ maxWidth: 400 }}>
-            <h1 style={{ fontSize: 14, fontWeight: 600, color: "#0a0a0a", letterSpacing: "-0.02em", marginBottom: 20, marginTop: 0 }}>Add item</h1>
-            <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-              {[
-                { side: "front", label: "Front", required: true, data: addForm.frontData },
-                { side: "back", label: "Back", required: false, data: addForm.backData }
-              ].map(({ side, label, required, data }) => (
-                <div
-                  key={side}
-                  className="btn upload-zone"
-                  onClick={() => triggerUpload(side)}
-                  style={{ flex: 1, border: data ? "1px solid #c8f55a" : "1px dashed #d4d4d4", borderRadius: 10, background: data ? "#0a0a0a" : "#fff", cursor: "pointer", overflow: "hidden", height: 156, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 4, position: "relative", transition: "border-color 150ms ease, transform 160ms var(--ease-out)" }}
-                >
+          <div style={{ padding: "16px", maxWidth: 400, margin: "0 auto", animation: "fadeUp 0.25s var(--ease-out)" }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "rgba(255,255,255,0.85)", letterSpacing: "-0.03em", marginBottom: 16 }}>Add item</div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+              {[{ side: "front", label: "Front", data: addForm.frontData }, { side: "back", label: "Back", data: addForm.backData }].map(({ side, label, data }) => (
+                <div key={side} className="wore-btn" onClick={() => triggerUpload(side)} style={{ flex: 1, aspectRatio: "1", border: data ? "1px solid rgba(200,245,90,0.3)" : "1px dashed rgba(255,255,255,0.1)", borderRadius: 14, background: data ? "rgba(200,245,90,0.05)" : "rgba(255,255,255,0.02)", cursor: "pointer", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 6, position: "relative" }}>
                   {data ? (
                     <>
                       <img src={data} alt={label} style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.75 }} />
-                      <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(200,245,90,0.92)", color: "#0a0a0a", fontSize: 10, fontWeight: 600, textAlign: "center", padding: "4px 0", letterSpacing: "0.04em" }}>✓ {label.toUpperCase()}</div>
+                      <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(200,245,90,0.85)", color: "#0a0a0f", fontSize: 10, fontWeight: 700, textAlign: "center", padding: "4px 0", letterSpacing: "0.06em" }}>✓ {label.toUpperCase()}</div>
                     </>
                   ) : (
                     <>
-                      <div style={{ fontSize: 18, opacity: 0.15, lineHeight: 1 }}>↑</div>
-                      <div style={{ fontSize: 11, color: "#bbb", letterSpacing: "-0.01em" }}>{label}{required ? " *" : ""}</div>
+                      <div style={{ fontSize: 20, opacity: 0.15 }}>↑</div>
+                      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.25)", letterSpacing: "-0.01em" }}>{label}{side === "front" ? " *" : ""}</div>
                     </>
                   )}
                 </div>
               ))}
             </div>
             <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleFileChange} />
-
-            <div style={{ marginBottom: 10 }}>
-              <label style={labelStyle}>Name *</label>
-              <input value={addForm.name} onChange={e => setAddForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Navy slim chinos" style={inputStyle} />
-            </div>
-            <div style={{ marginBottom: 20 }}>
-              <label style={labelStyle}>Category</label>
-              <select value={addForm.category} onChange={e => setAddForm(f => ({ ...f, category: e.target.value }))} style={inputStyle}>
-                {Object.entries(CATS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-              </select>
-            </div>
-
+            <label style={{ display: "block", fontSize: 11, fontWeight: 500, color: "rgba(255,255,255,0.3)", letterSpacing: "-0.01em", marginBottom: 5 }}>Name *</label>
+            <input className="glass-input" value={addForm.name} onChange={e => setAddForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Navy slim chinos" style={{ width: "100%", padding: "10px 12px", background: "rgba(255,255,255,0.04)", border: "0.5px solid rgba(255,255,255,0.1)", borderRadius: 10, fontSize: 13, color: "rgba(255,255,255,0.8)", fontFamily: "inherit", letterSpacing: "-0.01em", display: "block", marginBottom: 10, transition: "border-color 0.15s ease" }} />
+            <label style={{ display: "block", fontSize: 11, fontWeight: 500, color: "rgba(255,255,255,0.3)", letterSpacing: "-0.01em", marginBottom: 5 }}>Category</label>
+            <select className="glass-input" value={addForm.category} onChange={e => setAddForm(f => ({ ...f, category: e.target.value }))} style={{ width: "100%", padding: "10px 12px", background: "rgba(255,255,255,0.04)", border: "0.5px solid rgba(255,255,255,0.1)", borderRadius: 10, fontSize: 13, color: "rgba(255,255,255,0.8)", fontFamily: "inherit", letterSpacing: "-0.01em", display: "block", marginBottom: 20 }}>
+              {Object.entries(CATS).map(([k, v]) => <option key={k} value={k} style={{ background: "#1a1a24" }}>{v}</option>)}
+            </select>
             <div style={{ display: "flex", gap: 8 }}>
-              <button className="btn" onClick={() => { setAddForm({ ...EMPTY_FORM }); setView("wardrobe"); }} style={btnGhost}>Cancel</button>
-              <button
-                className="btn"
-                onClick={handleAdd}
-                disabled={!addForm.name || !addForm.frontData || saving}
-                style={{ ...btnPrimary, flex: 1, opacity: !addForm.name || !addForm.frontData ? 0.35 : 1, cursor: !addForm.name || !addForm.frontData ? "not-allowed" : "pointer" }}
-              >
-                <span className={`btn-content${saving ? " saving" : ""}`}>{saving ? "Saving…" : "Add to closet"}</span>
-              </button>
+              <button className="wore-btn" onClick={() => { setAddForm({ ...EMPTY_FORM }); setView("wardrobe"); }} style={{ background: "rgba(255,255,255,0.04)", border: "0.5px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.3)", borderRadius: 10, padding: "10px 16px", fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "inherit", letterSpacing: "-0.01em" }}>Cancel</button>
+              <button className="wore-btn" onClick={handleAdd} disabled={!addForm.name || !addForm.frontData || saving} style={{ flex: 1, background: "#c8f55a", border: "none", color: "#0a0a0f", borderRadius: 10, padding: "10px 16px", fontSize: 13, fontWeight: 600, cursor: !addForm.name || !addForm.frontData ? "not-allowed" : "pointer", opacity: !addForm.name || !addForm.frontData ? 0.35 : 1, fontFamily: "inherit", letterSpacing: "-0.02em" }}>{saving ? "Saving…" : "Add to closet"}</button>
             </div>
           </div>
         )}
 
         {/* Outfits */}
         {view === "outfits" && (
-          <div className="view-enter">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <h1 style={{ fontSize: 14, fontWeight: 600, color: "#0a0a0a", letterSpacing: "-0.02em", margin: 0 }}>Today's picks</h1>
-              <button className="btn" onClick={generateOutfits} disabled={generating} style={btnSecondary}>
-                {generating ? "Styling…" : "↻ Restyle"}
-              </button>
+          <div style={{ animation: "fadeUp 0.25s var(--ease-out)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px 12px" }}>
+              <span style={{ fontSize: 11, fontWeight: 500, color: "rgba(255,255,255,0.3)", letterSpacing: "0.06em", textTransform: "uppercase" }}>Today's picks</span>
+              <button className="wore-btn" onClick={generateOutfits} disabled={generating} style={{ background: "rgba(255,255,255,0.04)", border: "0.5px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.5)", fontSize: 12, fontWeight: 500, borderRadius: 8, padding: "4px 10px", cursor: "pointer", fontFamily: "inherit", letterSpacing: "-0.01em" }}>{generating ? "Styling…" : "↻ Restyle"}</button>
             </div>
-
             {generating && (
               <div style={{ textAlign: "center", padding: "60px 0" }}>
-                {/* Fast spinner — makes loading feel faster */}
-                <div style={{ width: 20, height: 20, border: "1.5px solid #e5e5e5", borderTopColor: "#0a0a0a", borderRadius: "50%", animation: "spin 0.45s linear infinite", margin: "0 auto 10px" }} />
-                <div style={{ fontSize: 12, color: "#bbb", letterSpacing: "-0.01em" }}>Styling your wardrobe</div>
+                <div style={{ width: 20, height: 20, border: "1.5px solid rgba(255,255,255,0.08)", borderTopColor: "#c8f55a", borderRadius: "50%", animation: "spin 0.45s linear infinite", margin: "0 auto 10px" }} />
+                <div style={{ fontSize: 12, color: "rgba(255,255,255,0.2)", letterSpacing: "-0.01em" }}>Styling your wardrobe</div>
               </div>
             )}
-
             {!generating && genError && (
-              <div style={{ border: "1px solid #e5e5e5", borderRadius: 10, padding: "24px", textAlign: "center", animation: "fadeUp 200ms var(--ease-out)" }}>
-                <div style={{ fontSize: 12, color: "#999", marginBottom: 14, letterSpacing: "-0.01em" }}>{genError}</div>
-                <button className="btn" onClick={generateOutfits} style={btnPrimary}>Try again</button>
+              <div style={{ margin: "0 16px", padding: "20px", background: "rgba(255,255,255,0.03)", border: "0.5px solid rgba(255,255,255,0.08)", borderRadius: 16, textAlign: "center" }}>
+                <div style={{ fontSize: 12, color: "rgba(255,255,255,0.3)", marginBottom: 14 }}>{genError}</div>
+                <button className="wore-btn" onClick={generateOutfits} style={btnPrimary}>Try again</button>
               </div>
             )}
-
             {!generating && !genError && outfits.length === 0 && (
               <div style={{ textAlign: "center", padding: "60px 0" }}>
-                <div style={{ fontSize: 12, color: "#d4d4d4", letterSpacing: "-0.01em" }}>Hit Restyle to generate outfit ideas</div>
+                <div style={{ fontSize: 12, color: "rgba(255,255,255,0.15)", letterSpacing: "-0.01em" }}>Hit Restyle to generate outfit ideas</div>
               </div>
             )}
-
             {outfits.length > 0 && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "0 16px 24px" }}>
                 {outfits.map((outfit, i) => (
-                  <div key={i} className="outfit-card" style={{ background: "#fff", borderRadius: 10, border: i === 0 ? "1px solid #c8f55a" : "1px solid #e5e5e5", overflow: "hidden" }}>
-                    <div style={{ padding: "13px 15px 11px", borderBottom: "1px solid #f5f5f5" }}>
+                  <div key={i} className="outfit-item wore-card" style={{ background: "rgba(255,255,255,0.03)", border: i === 0 ? "0.5px solid rgba(200,245,90,0.2)" : "0.5px solid rgba(255,255,255,0.08)", borderRadius: 16, overflow: "hidden", position: "relative" }}>
+                    {i === 0 && <div style={{ position: "absolute", inset: 0, background: "linear-gradient(135deg, rgba(200,245,90,0.04) 0%, transparent 60%)", pointerEvents: "none" }} />}
+                    <div style={{ padding: "13px 14px 11px", borderBottom: "0.5px solid rgba(255,255,255,0.05)" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                        <div>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: "#0a0a0a", letterSpacing: "-0.02em", marginBottom: 2 }}>{outfit.name}</div>
-                          <div style={{ fontSize: 10, color: "#ccc", letterSpacing: "0.05em" }}>
-                            {"★".repeat(Math.round(outfit.styleScore / 2))}{"☆".repeat(5 - Math.round(outfit.styleScore / 2))}
-                          </div>
-                        </div>
-                        <span style={{ fontSize: 11, fontWeight: 600, background: i === 0 ? "#c8f55a" : "#f5f5f5", color: i === 0 ? "#0a0a0a" : "#999", borderRadius: 5, padding: "3px 8px", letterSpacing: "-0.01em" }}>{outfit.styleScore}/10</span>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.85)", letterSpacing: "-0.02em" }}>{outfit.name}</div>
+                        <span style={{ fontSize: 11, fontWeight: 600, background: i === 0 ? "rgba(200,245,90,0.12)" : "rgba(255,255,255,0.06)", color: i === 0 ? "#c8f55a" : "rgba(255,255,255,0.35)", border: i === 0 ? "0.5px solid rgba(200,245,90,0.25)" : "0.5px solid rgba(255,255,255,0.08)", borderRadius: 20, padding: "3px 9px", letterSpacing: "-0.01em" }}>{outfit.styleScore}/10</span>
                       </div>
                     </div>
-                    <div style={{ padding: "11px 15px 13px" }}>
+                    <div style={{ padding: "11px 14px 13px" }}>
                       <div style={{ display: "flex", gap: 8, marginBottom: 10, overflowX: "auto" }}>
                         {outfit.items.map(item => (
                           <div key={item.id} style={{ flexShrink: 0 }}>
-                            <img src={item.image_data || item.imageData} alt={item.name} style={{ width: 52, height: 52, objectFit: "cover", borderRadius: 7, display: "block", border: "1px solid #e5e5e5" }} />
-                            <div style={{ fontSize: 9, color: "#ccc", marginTop: 3, maxWidth: 52, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "center" }}>{item.name}</div>
+                            <img src={item.image_data || item.imageData} alt={item.name} style={{ width: 48, height: 48, objectFit: "cover", borderRadius: 9, display: "block", border: "0.5px solid rgba(255,255,255,0.1)" }} />
                           </div>
                         ))}
                       </div>
-                      <p style={{ fontSize: 12, color: "#555", lineHeight: 1.7, margin: "0 0 8px", letterSpacing: "-0.01em" }}>{outfit.description}</p>
-                      <div style={{ fontSize: 11, color: "#999", letterSpacing: "-0.01em" }}>💡 {outfit.tips}</div>
+                      <p style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", lineHeight: 1.7, margin: "0 0 7px", letterSpacing: "-0.01em" }}>{outfit.description}</p>
+                      <div style={{ fontSize: 11, color: "rgba(200,245,90,0.5)", letterSpacing: "-0.01em" }}>💡 {outfit.tips}</div>
                     </div>
                   </div>
                 ))}
@@ -472,52 +379,30 @@ export default function AppPage() {
         )}
       </main>
 
-      {/* Bottom sheet modal — slides in from bottom with drawer easing */}
+      {/* Bottom sheet preview */}
       {previewItem && (
         <>
-          <div
-            onClick={() => setPreviewItem(null)}
-            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", zIndex: 200, backdropFilter: "blur(3px)", animation: "backdropIn 200ms ease forwards" }}
-          />
-          <div
-            style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 201, display: "flex", justifyContent: "center" }}
-          >
-            <div
-              onClick={e => e.stopPropagation()}
-              style={{ background: "#fff", borderRadius: "14px 14px 0 0", maxWidth: 440, width: "100%", overflow: "hidden", animation: "sheetIn 320ms var(--ease-drawer) forwards" }}
-            >
-              <img
-                src={previewSide === "front" ? previewItem.imageData : (previewItem.backData || previewItem.imageData)}
-                alt={previewItem.name}
-                style={{ width: "100%", maxHeight: 320, objectFit: "cover", display: "block" }}
-              />
+          <div onClick={() => setPreviewItem(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", zIndex: 100, animation: "bdIn 0.2s ease" }} />
+          <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 101, display: "flex", justifyContent: "center" }}>
+            <div onClick={e => e.stopPropagation()} style={{ background: "rgba(14,14,20,0.96)", backdropFilter: "blur(40px)", WebkitBackdropFilter: "blur(40px)", border: "0.5px solid rgba(255,255,255,0.1)", borderRadius: "20px 20px 0 0", maxWidth: 440, width: "100%", animation: "sheetIn 0.32s var(--ease-drawer)" }}>
+              <div style={{ width: 36, height: 3, background: "rgba(255,255,255,0.15)", borderRadius: 2, margin: "14px auto 0" }} />
+              <img src={previewSide === "front" ? previewItem.imageData : (previewItem.backData || previewItem.imageData)} alt={previewItem.name} style={{ width: "100%", maxHeight: 300, objectFit: "cover", display: "block", marginTop: 12 }} />
               {previewItem.backData && (
-                <div style={{ display: "flex", borderBottom: "1px solid #f0f0f0" }}>
+                <div style={{ display: "flex", borderBottom: "0.5px solid rgba(255,255,255,0.06)" }}>
                   {["front", "back"].map(side => (
-                    <button
-                      key={side}
-                      className="btn"
-                      onClick={() => setPreviewSide(side)}
-                      style={{ flex: 1, padding: "10px", border: "none", background: previewSide === side ? "#0a0a0a" : "#fafafa", color: previewSide === side ? "#fafafa" : "#aaa", fontWeight: 500, fontSize: 12, cursor: "pointer", letterSpacing: "-0.01em", transition: "background 150ms ease, color 150ms ease, transform 160ms var(--ease-out)" }}
-                    >
-                      {side.charAt(0).toUpperCase() + side.slice(1)}
-                    </button>
+                    <button key={side} className="wore-btn" onClick={() => setPreviewSide(side)} style={{ flex: 1, padding: "10px", border: "none", background: previewSide === side ? "rgba(200,245,90,0.1)" : "transparent", color: previewSide === side ? "#c8f55a" : "rgba(255,255,255,0.25)", fontWeight: 500, fontSize: 12, cursor: "pointer", letterSpacing: "-0.01em", fontFamily: "inherit" }}>{side.charAt(0).toUpperCase() + side.slice(1)}</button>
                   ))}
                 </div>
               )}
-              {/* Drag handle */}
-              <div style={{ position: "absolute", top: 8, left: "50%", transform: "translateX(-50%)", width: 32, height: 3, background: "rgba(255,255,255,0.4)", borderRadius: 2 }} />
-              <div style={{ padding: "14px 18px 20px" }}>
+              <div style={{ padding: "16px 18px 28px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
                   <div>
-                    <div style={{ fontWeight: 600, fontSize: 14, color: "#0a0a0a", letterSpacing: "-0.02em" }}>{previewItem.name}</div>
-                    <div style={{ fontSize: 11, color: "#bbb", marginTop: 2, letterSpacing: "-0.01em" }}>{CATS[previewItem.category] || previewItem.category}</div>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: "rgba(255,255,255,0.9)", letterSpacing: "-0.03em" }}>{previewItem.name}</div>
+                    <div style={{ fontSize: 12, color: "rgba(255,255,255,0.3)", marginTop: 2, letterSpacing: "-0.01em" }}>{CATS[previewItem.category] || previewItem.category}</div>
                   </div>
-                  <span style={{ fontSize: 11, fontWeight: 500, background: previewItem.dirty ? "#fef2f2" : "#f0fdf4", color: previewItem.dirty ? "#dc2626" : "#16a34a", borderRadius: 5, padding: "4px 10px", letterSpacing: "-0.01em", transition: "background 200ms ease, color 200ms ease" }}>
-                    {previewItem.dirty ? "In wash" : "Clean"}
-                  </span>
+                  <span style={{ fontSize: 11, fontWeight: 500, background: previewItem.dirty ? "rgba(248,113,113,0.1)" : "rgba(74,222,128,0.1)", color: previewItem.dirty ? "#f87171" : "#4ade80", border: previewItem.dirty ? "0.5px solid rgba(248,113,113,0.25)" : "0.5px solid rgba(74,222,128,0.25)", borderRadius: 6, padding: "4px 10px", letterSpacing: "-0.01em" }}>{previewItem.dirty ? "In wash" : "Clean"}</span>
                 </div>
-                <button className="btn" onClick={() => setPreviewItem(null)} style={{ ...btnPrimary, width: "100%", justifyContent: "center" }}>Done</button>
+                <button className="wore-btn" onClick={() => setPreviewItem(null)} style={{ ...btnPrimary, width: "100%", justifyContent: "center" }}>Done</button>
               </div>
             </div>
           </div>
@@ -527,8 +412,4 @@ export default function AppPage() {
   );
 }
 
-const btnPrimary = { background: "#0a0a0a", color: "#fafafa", border: "none", borderRadius: 7, padding: "9px 16px", fontSize: 13, fontWeight: 500, cursor: "pointer", letterSpacing: "-0.01em", fontFamily: "inherit", display: "flex", alignItems: "center" };
-const btnSecondary = { background: "#fff", color: "#0a0a0a", border: "1px solid #e5e5e5", borderRadius: 7, padding: "7px 13px", fontSize: 13, fontWeight: 500, cursor: "pointer", letterSpacing: "-0.01em", fontFamily: "inherit" };
-const btnGhost = { background: "transparent", color: "#aaa", border: "1px solid #e5e5e5", borderRadius: 7, padding: "9px 16px", fontSize: 13, fontWeight: 500, cursor: "pointer", letterSpacing: "-0.01em", fontFamily: "inherit" };
-const labelStyle = { display: "block", fontSize: 11, fontWeight: 500, color: "#aaa", letterSpacing: "-0.01em", marginBottom: 5 };
-const inputStyle = { width: "100%", padding: "9px 11px", border: "1px solid #e5e5e5", borderRadius: 7, fontSize: 13, background: "#fff", color: "#0a0a0a", fontFamily: "inherit", letterSpacing: "-0.01em", display: "block", transition: "border-color 150ms ease" };
+const btnPrimary = { background: "#c8f55a", border: "none", color: "#0a0a0f", borderRadius: 10, padding: "10px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", letterSpacing: "-0.02em", fontFamily: "inherit", display: "flex", alignItems: "center" };
