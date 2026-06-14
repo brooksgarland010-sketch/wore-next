@@ -21,36 +21,14 @@ async function resizeImage(dataUrl, maxWidth = 1200) {
 }
 
 const CATS = {
-  tops: { label: "Top", bg: "#e8f4e8", color: "#1a5c1a" },
-  bottoms: { label: "Bottom", bg: "#f0e8f8", color: "#4a1a7a" },
-  outerwear: { label: "Outer", bg: "#fdf0d8", color: "#7a4a00" },
-  shoes: { label: "Shoes", bg: "#e8f8f4", color: "#006644" },
-  accessories: { label: "Acc.", bg: "#f8ece8", color: "#7a2a00" },
-  dresses: { label: "Dress", bg: "#f8e8f0", color: "#7a0044" },
-  other: { label: "Other", bg: "#f0f0ec", color: "#444" },
+  tops: "Top",
+  bottoms: "Bottom",
+  outerwear: "Outer",
+  shoes: "Shoes",
+  accessories: "Acc.",
+  dresses: "Dress",
+  other: "Other",
 };
-
-function WoreLogo() {
-  return (
-    <svg width="44" height="44" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
-      <rect width="512" height="512" rx="114" fill="#0d0d0d" stroke="#c8f55a" strokeWidth="12"/>
-      <text x="256" y="330" fontFamily="'Syne', 'Arial Black', sans-serif" fontSize="300" fontWeight="800" fill="#c8f55a" textAnchor="middle">W</text>
-      <line x1="80" y1="395" x2="170" y2="395" stroke="#333" strokeWidth="8"/>
-      <line x1="342" y1="395" x2="432" y2="395" stroke="#333" strokeWidth="8"/>
-      <text x="256" y="425" fontFamily="'Syne', 'Arial Black', sans-serif" fontSize="68" fontWeight="800" fill="#555" textAnchor="middle" letterSpacing="14">WORE</text>
-    </svg>
-  );
-}
-
-function Badge({ category }) {
-  const c = CATS[category] || CATS.other;
-  return <span style={{ background: c.bg, color: c.color, fontSize: 10, fontWeight: 700, borderRadius: 5, padding: "2px 7px", letterSpacing: "0.06em", textTransform: "uppercase" }}>{c.label}</span>;
-}
-
-function Stars({ score }) {
-  const filled = Math.round(score / 2);
-  return <span style={{ fontSize: 12, letterSpacing: 1 }}>{Array.from({ length: 5 }, (_, i) => <span key={i} style={{ color: i < filled ? "#c8f55a" : "#333" }}>★</span>)}</span>;
-}
 
 export default function AppPage() {
   const { user, isLoaded } = useUser();
@@ -67,10 +45,9 @@ export default function AppPage() {
   const [saving, setSaving] = useState(false);
   const fileRef = useRef();
 
-  // Load wardrobe from Supabase on mount
   useEffect(() => {
     if (!isLoaded || !user) return;
-      supabase
+    supabase
       .from("wardrobe_items")
       .select("*")
       .eq("user_id", user.id)
@@ -82,32 +59,41 @@ export default function AppPage() {
       });
   }, [isLoaded, user]);
 
-  const addItemToDb = async (item) => {
+  const normalizeItem = (item) => ({
+    ...item,
+    imageData: item.image_data || item.imageData,
+    backData: item.back_data || item.backData,
+  });
+
+  const handleAdd = async () => {
+    if (!addForm.name || !addForm.frontData) return;
+    setSaving(true);
+    try {
       const { data, error } = await supabase
-      .from("wardrobe_items")
-      .insert([{ ...item, user_id: user.id }])
-      .select()
-      .single();
-    if (error) throw error;
-    return data;
+        .from("wardrobe_items")
+        .insert([{ name: addForm.name, category: addForm.category, image_data: addForm.frontData, back_data: addForm.backData || null, dirty: false, user_id: user.id }])
+        .select().single();
+      if (error) throw error;
+      setWardrobe(w => [...w, normalizeItem(data)]);
+      setAddForm({ ...EMPTY_FORM });
+      setView("wardrobe");
+    } catch (err) {
+      alert("Failed to save: " + err.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const updateItemInDb = async (id, updates) => {
-      const { error } = await supabase
-      .from("wardrobe_items")
-      .update(updates)
-      .eq("id", id)
-      .eq("user_id", user.id);
-    if (error) throw error;
+  const toggleDirty = async (id) => {
+    const item = wardrobe.find(i => i.id === id);
+    const newDirty = !item.dirty;
+    setWardrobe(w => w.map(i => i.id === id ? { ...i, dirty: newDirty } : i));
+    await supabase.from("wardrobe_items").update({ dirty: newDirty }).eq("id", id).eq("user_id", user.id);
   };
 
-  const deleteItemFromDb = async (id) => {
-      const { error } = await supabase
-      .from("wardrobe_items")
-      .delete()
-      .eq("id", id)
-      .eq("user_id", user.id);
-    if (error) throw error;
+  const removeItem = async (id) => {
+    setWardrobe(w => w.filter(i => i.id !== id));
+    await supabase.from("wardrobe_items").delete().eq("id", id).eq("user_id", user.id);
   };
 
   const triggerUpload = (side) => {
@@ -128,50 +114,6 @@ export default function AppPage() {
     reader.readAsDataURL(file);
   };
 
-  const handleAdd = async () => {
-    if (!addForm.name || !addForm.frontData) return;
-    setSaving(true);
-    try {
-      const newItem = {
-        name: addForm.name,
-        category: addForm.category,
-        image_data: addForm.frontData,
-        back_data: addForm.backData || null,
-        dirty: false,
-      };
-      const saved = await addItemToDb(newItem);
-      // normalize field names for UI (db uses snake_case)
-      setWardrobe(w => [...w, normalizeItem(saved)]);
-      setAddForm({ ...EMPTY_FORM });
-      setView("wardrobe");
-    } catch (err) {
-      alert("Failed to save: " + err.message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  // DB uses snake_case, UI uses camelCase — normalize
-  const normalizeItem = (item) => ({
-    ...item,
-    imageData: item.image_data || item.imageData,
-    backData: item.back_data || item.backData,
-  });
-
-  const toggleDirty = async (id) => {
-    const item = wardrobe.find(i => i.id === id);
-    const newDirty = !item.dirty;
-    setWardrobe(w => w.map(i => i.id === id ? { ...i, dirty: newDirty } : i));
-    try { await updateItemInDb(id, { dirty: newDirty }); }
-    catch (err) { console.error("Update error:", err); }
-  };
-
-  const removeItem = async (id) => {
-    setWardrobe(w => w.filter(i => i.id !== id));
-    try { await deleteItemFromDb(id); }
-    catch (err) { console.error("Delete error:", err); }
-  };
-
   const generateOutfits = async () => {
     const clean = wardrobe.filter(i => !i.dirty);
     if (clean.length < 2) { alert("Add at least 2 clean items first!"); return; }
@@ -189,7 +131,7 @@ export default function AppPage() {
         body: JSON.stringify({
           model: "claude-sonnet-4-5-20250929",
           max_tokens: 1500,
-          messages: [{ role: "user", content: [...imageContent, { type: "text", text: `You are an expert fashion stylist. Here are ${limited.length} clothing items (images above in order):\n\n${itemList}\n\nCreate 4 stylish outfit combinations. Return ONLY raw JSON, no markdown:\n{"outfits":[{"name":"string","itemIds":[number,number],"description":"string","styleScore":8,"tips":"string"}]}` }] }]
+          messages: [{ role: "user", content: [...imageContent, { type: "text", text: `You are an expert fashion stylist. Here are ${limited.length} clothing items:\n\n${itemList}\n\nCreate 4 stylish outfit combinations. Return ONLY raw JSON:\n{"outfits":[{"name":"string","itemIds":[number,number],"description":"string","styleScore":8,"tips":"string"}]}` }] }]
         })
       });
       if (!response.ok) throw new Error(`API error ${response.status}`);
@@ -216,77 +158,120 @@ export default function AppPage() {
 
   if (!isLoaded || loading) {
     return (
-      <div style={{ minHeight: "100vh", background: "#f5f4f0", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
-        <WoreLogo />
-        <div style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: 16, fontWeight: 800, color: "#0d0d0d" }}>Loading your closet...</div>
-        <div style={{ display: "flex", gap: 6 }}>
-          {[0,1,2].map(i => <div key={i} style={{ width: 7, height: 7, borderRadius: "50%", background: "#c8f55a", animation: "pulse 1.2s infinite", animationDelay: `${i*0.2}s` }} />)}
-        </div>
+      <div style={{ minHeight: "100vh", background: "#fafafa", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 12 }}>
+        <div style={{ width: 32, height: 32, border: "1.5px solid #e5e5e5", borderTopColor: "#0a0a0a", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
+        <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+        <span style={{ fontSize: 13, color: "#999", letterSpacing: "-0.01em" }}>Loading your closet</span>
       </div>
     );
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f5f4f0", fontFamily: "var(--font-inter), sans-serif" }}>
-      <style>{`@keyframes pulse{0%,80%,100%{transform:scale(0.5);opacity:0.3}40%{transform:scale(1);opacity:1}}`}</style>
-      <header style={{ background: "#0d0d0d", padding: "0 1.25rem", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 100 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <WoreLogo />
-          <div>
-            <div style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: 20, fontWeight: 800, color: "#fff", letterSpacing: "-0.5px", lineHeight: 1 }}>wore<span style={{ color: "#c8f55a" }}>.</span></div>
-            <div style={{ fontSize: 9, color: "#555", letterSpacing: "0.2em", textTransform: "uppercase", marginTop: 1 }}>AI wardrobe stylist</div>
-          </div>
+    <div style={{ minHeight: "100vh", background: "#fafafa", fontFamily: "'Inter', 'SF Pro Display', system-ui, sans-serif" }}>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg) } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: translateY(0) } }
+        * { box-sizing: border-box; }
+        button:active { transform: scale(0.97); }
+        button { transition: all 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94); }
+        input, select { transition: border-color 0.15s ease; }
+        input:focus, select:focus { outline: none; border-color: #0a0a0a !important; }
+      `}</style>
+
+      {/* Header */}
+      <header style={{ background: "#fafafa", borderBottom: "1px solid #e5e5e5", padding: "0 24px", height: 52, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 100, backdropFilter: "blur(8px)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 15, fontWeight: 600, letterSpacing: "-0.03em", color: "#0a0a0a" }}>wore<span style={{ color: "#c8f55a" }}>.</span></span>
         </div>
-        <nav style={{ display: "flex", gap: 5 }}>
-          {[{ key: "wardrobe", label: "Closet" }, { key: "add", label: "+ Add" }, { key: "outfits", label: "Outfits" }].map(tab => (
-            <button key={tab.key} onClick={() => tab.key === "outfits" ? generateOutfits() : setView(tab.key)}
-              style={{ background: view === tab.key ? "#c8f55a" : "#1a1a1a", color: view === tab.key ? "#0d0d0d" : "#888", border: "none", borderRadius: 20, padding: "7px 13px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+        <nav style={{ display: "flex", alignItems: "center", gap: 2 }}>
+          {[
+            { key: "wardrobe", label: "Closet" },
+            { key: "add", label: "Add" },
+            { key: "outfits", label: "Outfits" }
+          ].map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => tab.key === "outfits" ? generateOutfits() : setView(tab.key)}
+              style={{
+                background: view === tab.key ? "#0a0a0a" : "transparent",
+                color: view === tab.key ? "#fafafa" : "#666",
+                border: "none",
+                borderRadius: 6,
+                padding: "5px 12px",
+                fontSize: 13,
+                fontWeight: 500,
+                cursor: "pointer",
+                letterSpacing: "-0.01em",
+              }}
+            >
               {tab.label}
             </button>
           ))}
         </nav>
       </header>
 
+      {/* Stats bar */}
       {view === "wardrobe" && wardrobe.length > 0 && (
-        <div style={{ background: "#0d0d0d", padding: "0 1.25rem 14px", display: "flex", gap: 10 }}>
-          {[{ label: "Total", value: wardrobe.length, color: "#fff" }, { label: "Clean", value: cleanCount, color: "#c8f55a" }, { label: "Dirty", value: dirtyCount, color: "#ff6b6b" }].map(s => (
-            <div key={s.label} style={{ background: "#1a1a1a", borderRadius: 10, padding: "8px 14px", flex: 1, textAlign: "center" }}>
-              <div style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: 20, fontWeight: 800, color: s.color }}>{s.value}</div>
-              <div style={{ fontSize: 10, color: "#555", textTransform: "uppercase", letterSpacing: "0.1em", marginTop: 1 }}>{s.label}</div>
+        <div style={{ borderBottom: "1px solid #e5e5e5", padding: "12px 24px", display: "flex", gap: 24, background: "#fafafa" }}>
+          {[
+            { label: "Total", value: wardrobe.length },
+            { label: "Clean", value: cleanCount, accent: true },
+            { label: "In wash", value: dirtyCount, muted: true },
+          ].map(s => (
+            <div key={s.label} style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+              <span style={{ fontSize: 20, fontWeight: 600, letterSpacing: "-0.04em", color: s.accent ? "#16a34a" : s.muted ? "#dc2626" : "#0a0a0a" }}>{s.value}</span>
+              <span style={{ fontSize: 12, color: "#999", letterSpacing: "-0.01em" }}>{s.label}</span>
             </div>
           ))}
         </div>
       )}
 
-      <main style={{ maxWidth: 900, margin: "0 auto", padding: "1.25rem" }}>
+      <main style={{ maxWidth: 680, margin: "0 auto", padding: "32px 24px" }}>
+
+        {/* Wardrobe view */}
         {view === "wardrobe" && (
           wardrobe.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "5rem 2rem" }}>
-              <div style={{ margin: "0 auto 20px", display: "inline-block" }}><WoreLogo /></div>
-              <div style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: 24, fontWeight: 800, color: "#0d0d0d", marginBottom: 8 }}>Your closet is empty</div>
-              <div style={{ color: "#999", fontSize: 14, marginBottom: "2rem" }}>Add your first clothing item to get started</div>
-              <button onClick={() => setView("add")} style={fab}>+ Add first item</button>
+            <div style={{ textAlign: "center", padding: "80px 0", animation: "fadeIn 0.3s ease" }}>
+              <div style={{ fontSize: 13, color: "#999", marginBottom: 4, letterSpacing: "-0.01em" }}>Your closet is empty</div>
+              <div style={{ fontSize: 13, color: "#ccc", marginBottom: 32 }}>Add your first item to get started</div>
+              <button onClick={() => setView("add")} style={btnPrimary}>Add item</button>
             </div>
           ) : (
-            <div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem" }}>
-                <div style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: 20, fontWeight: 800, color: "#0d0d0d" }}>My Closet</div>
-                <button onClick={() => setView("add")} style={fabSmall}>+ Add item</button>
+            <div style={{ animation: "fadeIn 0.2s ease" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+                <h1 style={{ fontSize: 15, fontWeight: 600, color: "#0a0a0a", letterSpacing: "-0.02em", margin: 0 }}>Closet</h1>
+                <button onClick={() => setView("add")} style={btnSecondary}>+ Add item</button>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(155px, 1fr))", gap: 12 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(148px, 1fr))", gap: 8 }}>
                 {wardrobe.map(item => (
-                  <div key={item.id} style={{ background: "#fff", borderRadius: 16, overflow: "hidden", border: item.dirty ? "1.5px solid #ffaaaa" : "1px solid #ece9e2" }}>
-                    <div onClick={() => { setPreviewItem(normalizeItem(item)); setPreviewSide("front"); }} style={{ position: "relative", cursor: "pointer" }}>
-                      <img src={item.image_data || item.imageData} alt={item.name} style={{ width: "100%", height: 165, objectFit: "cover", display: "block" }} />
-                      {item.dirty && <div style={{ position: "absolute", top: 8, left: 8, background: "#0d0d0d", color: "#ff6b6b", fontSize: 9, fontWeight: 800, borderRadius: 5, padding: "2px 7px", textTransform: "uppercase" }}>Dirty</div>}
-                      {(item.back_data || item.backData) && <div style={{ position: "absolute", bottom: 8, right: 8, background: "rgba(13,13,13,0.75)", color: "#c8f55a", fontSize: 9, fontWeight: 700, borderRadius: 5, padding: "2px 7px" }}>+BACK</div>}
+                  <div
+                    key={item.id}
+                    style={{ background: "#fff", borderRadius: 10, overflow: "hidden", border: item.dirty ? "1px solid #fecaca" : "1px solid #e5e5e5", transition: "box-shadow 0.15s ease", cursor: "pointer" }}
+                    onMouseEnter={e => e.currentTarget.style.boxShadow = "0 2px 12px rgba(0,0,0,0.08)"}
+                    onMouseLeave={e => e.currentTarget.style.boxShadow = "none"}
+                  >
+                    <div onClick={() => { setPreviewItem(normalizeItem(item)); setPreviewSide("front"); }} style={{ position: "relative" }}>
+                      <img src={item.image_data || item.imageData} alt={item.name} style={{ width: "100%", height: 148, objectFit: "cover", display: "block" }} />
+                      {item.dirty && (
+                        <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(10,10,10,0.85)", color: "#fca5a5", fontSize: 10, fontWeight: 500, borderRadius: 4, padding: "2px 6px", backdropFilter: "blur(4px)" }}>In wash</div>
+                      )}
                     </div>
-                    <div style={{ padding: "10px 11px 11px" }}>
-                      <div style={{ fontWeight: 600, fontSize: 13, color: "#0d0d0d", marginBottom: 5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{item.name}</div>
-                      <Badge category={item.category} />
-                      <div style={{ display: "flex", gap: 6, marginTop: 9 }}>
-                        <button onClick={() => toggleDirty(item.id)} style={{ flex: 1, border: "none", background: item.dirty ? "#fff0f0" : "#f0fde4", borderRadius: 8, padding: "6px 0", cursor: "pointer", fontSize: 13, fontWeight: 600, color: item.dirty ? "#cc3333" : "#3b6d11" }}>{item.dirty ? "🧺" : "✓"}</button>
-                        <button onClick={() => removeItem(item.id)} style={{ border: "none", background: "#f5f4f0", borderRadius: 8, padding: "6px 10px", cursor: "pointer", fontSize: 13, color: "#bbb" }}>✕</button>
+                    <div style={{ padding: "10px 10px 8px" }}>
+                      <div style={{ fontWeight: 500, fontSize: 12, color: "#0a0a0a", marginBottom: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", letterSpacing: "-0.01em" }}>{item.name}</div>
+                      <div style={{ fontSize: 11, color: "#999", marginBottom: 8, letterSpacing: "-0.01em" }}>{CATS[item.category] || item.category}</div>
+                      <div style={{ display: "flex", gap: 4 }}>
+                        <button
+                          onClick={() => toggleDirty(item.id)}
+                          style={{ flex: 1, border: "1px solid #e5e5e5", background: "#fafafa", borderRadius: 5, padding: "5px 0", cursor: "pointer", fontSize: 11, fontWeight: 500, color: item.dirty ? "#dc2626" : "#16a34a", letterSpacing: "-0.01em" }}
+                        >
+                          {item.dirty ? "Dirty" : "Clean"}
+                        </button>
+                        <button
+                          onClick={() => removeItem(item.id)}
+                          style={{ border: "1px solid #e5e5e5", background: "#fafafa", borderRadius: 5, padding: "5px 8px", cursor: "pointer", fontSize: 11, color: "#ccc" }}
+                        >
+                          ×
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -296,94 +281,122 @@ export default function AppPage() {
           )
         )}
 
+        {/* Add view */}
         {view === "add" && (
-          <div style={{ maxWidth: 440, margin: "0 auto" }}>
-            <div style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: 20, fontWeight: 800, color: "#0d0d0d", marginBottom: "1.25rem" }}>Add New Item</div>
-            <div style={{ background: "#fff", borderRadius: 20, padding: "1.5rem", border: "1px solid #ece9e2" }}>
-              <div style={fieldLabel}>Photos</div>
-              <div style={{ display: "flex", gap: 10, marginBottom: "1.25rem" }}>
-                {[{ side: "front", label: "Front", required: true, data: addForm.frontData }, { side: "back", label: "Back", required: false, data: addForm.backData }].map(({ side, label, required, data }) => (
-                  <div key={side} onClick={() => triggerUpload(side)}
-                    style={{ flex: 1, border: data ? "1.5px solid #c8f55a" : "1.5px dashed #ddd", borderRadius: 14, background: data ? "#0d0d0d" : "#fafaf8", cursor: "pointer", overflow: "hidden", minHeight: 150, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 6, position: "relative" }}>
-                    {data ? (
-                      <><img src={data} alt={label} style={{ width: "100%", height: 150, objectFit: "cover", opacity: 0.85 }} /><div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(13,13,13,0.7)", color: "#c8f55a", fontSize: 10, fontWeight: 800, textAlign: "center", padding: "4px 0", textTransform: "uppercase" }}>✓ {label}</div></>
-                    ) : (
-                      <><div style={{ fontSize: 26, opacity: 0.3 }}>📷</div><div style={{ fontSize: 11, fontWeight: 600, color: "#bbb" }}>{label}{required ? " *" : ""}</div></>
-                    )}
-                  </div>
-                ))}
-              </div>
-              <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleFileChange} />
-              <div style={{ marginBottom: "1rem" }}>
-                <div style={fieldLabel}>Item Name *</div>
-                <input value={addForm.name} onChange={e => setAddForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Navy slim chinos" style={fieldInput} />
-              </div>
-              <div style={{ marginBottom: "1.5rem" }}>
-                <div style={fieldLabel}>Category</div>
-                <select value={addForm.category} onChange={e => setAddForm(f => ({ ...f, category: e.target.value }))} style={fieldInput}>
-                  {Object.entries(CATS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                </select>
-              </div>
-              <div style={{ display: "flex", gap: 10 }}>
-                <button onClick={() => { setAddForm({ ...EMPTY_FORM }); setView("wardrobe"); }} style={{ flex: 1, background: "#f5f4f0", color: "#666", border: "none", borderRadius: 12, padding: "13px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Cancel</button>
-                <button onClick={handleAdd} disabled={!addForm.name || !addForm.frontData || saving}
-                  style={{ flex: 2, background: !addForm.name || !addForm.frontData ? "#e0e0d8" : "#0d0d0d", color: !addForm.name || !addForm.frontData ? "#aaa" : "#c8f55a", border: "none", borderRadius: 12, padding: "13px", fontSize: 14, fontWeight: 800, cursor: !addForm.name || !addForm.frontData ? "not-allowed" : "pointer", fontFamily: "var(--font-syne), sans-serif" }}>
-                  {saving ? "Saving..." : "Add to Closet"}
-                </button>
-              </div>
+          <div style={{ maxWidth: 400, animation: "fadeIn 0.2s ease" }}>
+            <h1 style={{ fontSize: 15, fontWeight: 600, color: "#0a0a0a", letterSpacing: "-0.02em", marginBottom: 24, marginTop: 0 }}>Add item</h1>
+            <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+              {[
+                { side: "front", label: "Front", required: true, data: addForm.frontData },
+                { side: "back", label: "Back", required: false, data: addForm.backData }
+              ].map(({ side, label, required, data }) => (
+                <div
+                  key={side}
+                  onClick={() => triggerUpload(side)}
+                  style={{ flex: 1, border: data ? "1px solid #c8f55a" : "1px dashed #d4d4d4", borderRadius: 10, background: data ? "#0a0a0a" : "#fff", cursor: "pointer", overflow: "hidden", height: 160, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 4, position: "relative", transition: "border-color 0.15s ease" }}
+                >
+                  {data ? (
+                    <>
+                      <img src={data} alt={label} style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.8 }} />
+                      <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(200,245,90,0.9)", color: "#0a0a0a", fontSize: 10, fontWeight: 600, textAlign: "center", padding: "4px 0", letterSpacing: "0.05em" }}>✓ {label.toUpperCase()}</div>
+                    </>
+                  ) : (
+                    <>
+                      <div style={{ fontSize: 20, opacity: 0.2 }}>↑</div>
+                      <div style={{ fontSize: 11, color: "#aaa", letterSpacing: "-0.01em" }}>{label}{required ? " *" : ""}</div>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+            <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleFileChange} />
+
+            <div style={{ marginBottom: 12 }}>
+              <label style={labelStyle}>Name *</label>
+              <input
+                value={addForm.name}
+                onChange={e => setAddForm(f => ({ ...f, name: e.target.value }))}
+                placeholder="e.g. Navy slim chinos"
+                style={inputStyle}
+              />
+            </div>
+
+            <div style={{ marginBottom: 24 }}>
+              <label style={labelStyle}>Category</label>
+              <select value={addForm.category} onChange={e => setAddForm(f => ({ ...f, category: e.target.value }))} style={inputStyle}>
+                {Object.entries(CATS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            </div>
+
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => { setAddForm({ ...EMPTY_FORM }); setView("wardrobe"); }} style={btnGhost}>Cancel</button>
+              <button
+                onClick={handleAdd}
+                disabled={!addForm.name || !addForm.frontData || saving}
+                style={{ ...btnPrimary, flex: 1, opacity: !addForm.name || !addForm.frontData ? 0.4 : 1, cursor: !addForm.name || !addForm.frontData ? "not-allowed" : "pointer" }}
+              >
+                {saving ? "Saving…" : "Add to closet"}
+              </button>
             </div>
           </div>
         )}
 
+        {/* Outfits view */}
         {view === "outfits" && (
-          <div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem" }}>
-              <div style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: 20, fontWeight: 800, color: "#0d0d0d" }}>Today's Picks</div>
-              <button onClick={generateOutfits} disabled={generating} style={{ background: "#0d0d0d", color: "#c8f55a", border: "none", borderRadius: 20, padding: "8px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
-                {generating ? "Styling..." : "↻ Restyle"}
+          <div style={{ animation: "fadeIn 0.2s ease" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+              <h1 style={{ fontSize: 15, fontWeight: 600, color: "#0a0a0a", letterSpacing: "-0.02em", margin: 0 }}>Today's picks</h1>
+              <button onClick={generateOutfits} disabled={generating} style={btnSecondary}>
+                {generating ? "Styling…" : "Restyle ↻"}
               </button>
             </div>
+
             {generating && (
-              <div style={{ textAlign: "center", padding: "5rem 2rem" }}>
-                <div style={{ margin: "0 auto 20px", display: "inline-block" }}><WoreLogo /></div>
-                <div style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: 20, fontWeight: 800, color: "#0d0d0d", marginBottom: 8 }}>Styling your fits...</div>
-                <div style={{ color: "#999", fontSize: 13 }}>Claude is analyzing your wardrobe</div>
-                <div style={{ display: "flex", justifyContent: "center", gap: 6, marginTop: 20 }}>
-                  {[0,1,2].map(i => <div key={i} style={{ width: 7, height: 7, borderRadius: "50%", background: "#c8f55a", animation: "pulse 1.2s infinite", animationDelay: `${i*0.2}s` }} />)}
-                </div>
+              <div style={{ textAlign: "center", padding: "64px 0" }}>
+                <div style={{ width: 24, height: 24, border: "1.5px solid #e5e5e5", borderTopColor: "#0a0a0a", borderRadius: "50%", animation: "spin 0.7s linear infinite", margin: "0 auto 12px" }} />
+                <div style={{ fontSize: 13, color: "#999", letterSpacing: "-0.01em" }}>Styling your wardrobe</div>
               </div>
             )}
+
             {!generating && genError && (
-              <div style={{ background: "#fff", border: "1px solid #ffcccc", borderRadius: 16, padding: "2rem", textAlign: "center" }}>
-                <div style={{ fontSize: 32, marginBottom: 12 }}>⚠️</div>
-                <div style={{ fontFamily: "var(--font-syne), sans-serif", fontWeight: 800, fontSize: 16, color: "#0d0d0d", marginBottom: 6 }}>Generation failed</div>
-                <div style={{ color: "#999", fontSize: 13, marginBottom: "1.25rem" }}>{genError}</div>
-                <button onClick={generateOutfits} style={fab}>Try again</button>
+              <div style={{ border: "1px solid #e5e5e5", borderRadius: 10, padding: "24px", textAlign: "center" }}>
+                <div style={{ fontSize: 13, color: "#999", marginBottom: 16, letterSpacing: "-0.01em" }}>{genError}</div>
+                <button onClick={generateOutfits} style={btnPrimary}>Try again</button>
               </div>
             )}
-            {!generating && !genError && outfits.length === 0 && <div style={{ textAlign: "center", padding: "4rem", color: "#999", fontSize: 14 }}>Hit "Restyle" to generate outfits from your clean items.</div>}
+
+            {!generating && !genError && outfits.length === 0 && (
+              <div style={{ textAlign: "center", padding: "64px 0" }}>
+                <div style={{ fontSize: 13, color: "#ccc", letterSpacing: "-0.01em" }}>Hit Restyle to generate outfit ideas</div>
+              </div>
+            )}
+
             {outfits.length > 0 && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {outfits.map((outfit, i) => (
-                  <div key={i} style={{ background: "#fff", borderRadius: 20, overflow: "hidden", border: i === 0 ? "1.5px solid #c8f55a" : "1px solid #ece9e2" }}>
-                    <div style={{ background: "#0d0d0d", padding: "14px 18px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <div>
-                        <div style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: 15, fontWeight: 800, color: "#fff" }}>{outfit.name}</div>
-                        <div style={{ marginTop: 3 }}><Stars score={outfit.styleScore} /></div>
+                  <div key={i} style={{ background: "#fff", borderRadius: 10, border: i === 0 ? "1px solid #c8f55a" : "1px solid #e5e5e5", overflow: "hidden" }}>
+                    <div style={{ padding: "14px 16px 12px", borderBottom: "1px solid #f0f0f0" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: "#0a0a0a", letterSpacing: "-0.02em", marginBottom: 2 }}>{outfit.name}</div>
+                          <div style={{ fontSize: 11, color: "#999", letterSpacing: "-0.01em" }}>
+                            {"★".repeat(Math.round(outfit.styleScore / 2))}{"☆".repeat(5 - Math.round(outfit.styleScore / 2))}
+                          </div>
+                        </div>
+                        <span style={{ fontSize: 11, fontWeight: 600, background: i === 0 ? "#c8f55a" : "#f4f4f4", color: i === 0 ? "#0a0a0a" : "#666", borderRadius: 5, padding: "3px 8px", letterSpacing: "-0.01em" }}>{outfit.styleScore}/10</span>
                       </div>
-                      <div style={{ background: "#c8f55a", color: "#0d0d0d", fontFamily: "var(--font-syne), sans-serif", fontWeight: 800, fontSize: 13, borderRadius: 20, padding: "5px 12px" }}>{outfit.styleScore}/10</div>
                     </div>
-                    <div style={{ padding: "14px 18px" }}>
-                      <div style={{ display: "flex", gap: 10, marginBottom: 12, overflowX: "auto", paddingBottom: 2 }}>
+                    <div style={{ padding: "12px 16px 14px" }}>
+                      <div style={{ display: "flex", gap: 8, marginBottom: 12, overflowX: "auto" }}>
                         {outfit.items.map(item => (
-                          <div key={item.id} style={{ flex: "0 0 auto", textAlign: "center" }}>
-                            <img src={item.image_data || item.imageData} alt={item.name} style={{ width: 70, height: 70, objectFit: "cover", borderRadius: 12, display: "block", border: "1px solid #ece9e2" }} />
-                            <div style={{ fontSize: 10, color: "#aaa", marginTop: 4, maxWidth: 70, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</div>
+                          <div key={item.id} style={{ flexShrink: 0, textAlign: "center" }}>
+                            <img src={item.image_data || item.imageData} alt={item.name} style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 8, display: "block", border: "1px solid #e5e5e5" }} />
+                            <div style={{ fontSize: 10, color: "#bbb", marginTop: 3, maxWidth: 56, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", letterSpacing: "-0.01em" }}>{item.name}</div>
                           </div>
                         ))}
                       </div>
-                      <p style={{ fontSize: 13, color: "#555", lineHeight: 1.65, margin: "0 0 10px" }}>{outfit.description}</p>
-                      <div style={{ background: "#f5fde8", borderRadius: 10, padding: "9px 12px", fontSize: 12, color: "#3b6d11", fontWeight: 500 }}>💡 {outfit.tips}</div>
+                      <p style={{ fontSize: 12, color: "#555", lineHeight: 1.7, margin: "0 0 8px", letterSpacing: "-0.01em" }}>{outfit.description}</p>
+                      <div style={{ fontSize: 11, color: "#888", letterSpacing: "-0.01em" }}>💡 {outfit.tips}</div>
                     </div>
                   </div>
                 ))}
@@ -393,26 +406,45 @@ export default function AppPage() {
         )}
       </main>
 
+      {/* Preview modal */}
       {previewItem && (
-        <div onClick={() => setPreviewItem(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 24, overflow: "hidden", maxWidth: 360, width: "100%" }}>
-            <img src={previewSide === "front" ? previewItem.imageData : (previewItem.backData || previewItem.imageData)} alt={previewItem.name} style={{ width: "100%", maxHeight: 380, objectFit: "cover" }} />
+        <div
+          onClick={() => setPreviewItem(null)}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 200, display: "flex", alignItems: "flex-end", justifyContent: "center", padding: "0", backdropFilter: "blur(4px)", animation: "fadeIn 0.15s ease" }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ background: "#fff", borderRadius: "16px 16px 0 0", maxWidth: 420, width: "100%", overflow: "hidden", animation: "fadeIn 0.2s ease" }}
+          >
+            <img
+              src={previewSide === "front" ? previewItem.imageData : (previewItem.backData || previewItem.imageData)}
+              alt={previewItem.name}
+              style={{ width: "100%", maxHeight: 340, objectFit: "cover", display: "block" }}
+            />
             {previewItem.backData && (
-              <div style={{ display: "flex" }}>
-                {["front","back"].map(side => (
-                  <button key={side} onClick={() => setPreviewSide(side)} style={{ flex: 1, padding: "11px", border: "none", background: previewSide === side ? "#0d0d0d" : "#f5f4f0", color: previewSide === side ? "#c8f55a" : "#999", fontWeight: 700, fontSize: 12, cursor: "pointer", textTransform: "uppercase", fontFamily: "var(--font-syne), sans-serif" }}>{side}</button>
+              <div style={{ display: "flex", borderBottom: "1px solid #f0f0f0" }}>
+                {["front", "back"].map(side => (
+                  <button
+                    key={side}
+                    onClick={() => setPreviewSide(side)}
+                    style={{ flex: 1, padding: "10px", border: "none", background: previewSide === side ? "#0a0a0a" : "#fafafa", color: previewSide === side ? "#fafafa" : "#999", fontWeight: 500, fontSize: 12, cursor: "pointer", letterSpacing: "-0.01em" }}
+                  >
+                    {side.charAt(0).toUpperCase() + side.slice(1)}
+                  </button>
                 ))}
               </div>
             )}
-            <div style={{ padding: "1.25rem" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1rem" }}>
+            <div style={{ padding: "16px 20px 20px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
                 <div>
-                  <div style={{ fontFamily: "var(--font-syne), sans-serif", fontWeight: 800, fontSize: 17, color: "#0d0d0d" }}>{previewItem.name}</div>
-                  <div style={{ marginTop: 6 }}><Badge category={previewItem.category} /></div>
+                  <div style={{ fontWeight: 600, fontSize: 15, color: "#0a0a0a", letterSpacing: "-0.02em" }}>{previewItem.name}</div>
+                  <div style={{ fontSize: 12, color: "#999", marginTop: 2, letterSpacing: "-0.01em" }}>{CATS[previewItem.category] || previewItem.category}</div>
                 </div>
-                <span style={{ background: previewItem.dirty ? "#fff0f0" : "#f0fde4", color: previewItem.dirty ? "#cc3333" : "#3b6d11", padding: "5px 12px", borderRadius: 8, fontSize: 12, fontWeight: 700 }}>{previewItem.dirty ? "Dirty" : "Clean"}</span>
+                <span style={{ fontSize: 11, fontWeight: 500, background: previewItem.dirty ? "#fef2f2" : "#f0fdf4", color: previewItem.dirty ? "#dc2626" : "#16a34a", borderRadius: 5, padding: "4px 10px", letterSpacing: "-0.01em" }}>
+                  {previewItem.dirty ? "In wash" : "Clean"}
+                </span>
               </div>
-              <button onClick={() => setPreviewItem(null)} style={{ width: "100%", background: "#0d0d0d", color: "#c8f55a", border: "none", borderRadius: 12, padding: "12px", fontSize: 14, fontWeight: 800, cursor: "pointer", fontFamily: "var(--font-syne), sans-serif" }}>Close</button>
+              <button onClick={() => setPreviewItem(null)} style={{ ...btnPrimary, width: "100%" }}>Done</button>
             </div>
           </div>
         </div>
@@ -421,7 +453,63 @@ export default function AppPage() {
   );
 }
 
-const fab = { background: "#0d0d0d", color: "#c8f55a", border: "none", borderRadius: 12, padding: "13px 28px", fontSize: 14, fontWeight: 800, cursor: "pointer", fontFamily: "var(--font-syne), sans-serif" };
-const fabSmall = { background: "#0d0d0d", color: "#c8f55a", border: "none", borderRadius: 20, padding: "9px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer" };
-const fieldLabel = { fontSize: 11, fontWeight: 700, color: "#999", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 7 };
-const fieldInput = { width: "100%", padding: "11px 14px", border: "1.5px solid #ece9e2", borderRadius: 10, fontSize: 14, outline: "none", boxSizing: "border-box", fontFamily: "inherit", background: "#fafaf8", color: "#0d0d0d" };
+const btnPrimary = {
+  background: "#0a0a0a",
+  color: "#fafafa",
+  border: "none",
+  borderRadius: 7,
+  padding: "9px 16px",
+  fontSize: 13,
+  fontWeight: 500,
+  cursor: "pointer",
+  letterSpacing: "-0.01em",
+  fontFamily: "inherit",
+};
+
+const btnSecondary = {
+  background: "#fff",
+  color: "#0a0a0a",
+  border: "1px solid #e5e5e5",
+  borderRadius: 7,
+  padding: "7px 14px",
+  fontSize: 13,
+  fontWeight: 500,
+  cursor: "pointer",
+  letterSpacing: "-0.01em",
+  fontFamily: "inherit",
+};
+
+const btnGhost = {
+  background: "transparent",
+  color: "#999",
+  border: "1px solid #e5e5e5",
+  borderRadius: 7,
+  padding: "9px 16px",
+  fontSize: 13,
+  fontWeight: 500,
+  cursor: "pointer",
+  letterSpacing: "-0.01em",
+  fontFamily: "inherit",
+};
+
+const labelStyle = {
+  display: "block",
+  fontSize: 12,
+  fontWeight: 500,
+  color: "#666",
+  letterSpacing: "-0.01em",
+  marginBottom: 6,
+};
+
+const inputStyle = {
+  width: "100%",
+  padding: "9px 12px",
+  border: "1px solid #e5e5e5",
+  borderRadius: 7,
+  fontSize: 13,
+  background: "#fff",
+  color: "#0a0a0a",
+  fontFamily: "inherit",
+  letterSpacing: "-0.01em",
+  display: "block",
+};
